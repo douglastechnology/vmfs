@@ -1,12 +1,12 @@
-#define FUSE_USE_VERSION 26
-
 #include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <fcntl.h>
+#include <stdlib.h>
+#include "xxhash.h"
 
-
-int main(int argc, char *argv[])
+void write_block(const char *block)
 {
-	return 0;
+	char *path = malloc(100);
+	unsigned long long hash = XXH64(block, 1048576, 0);
+	sprintf(path, "/root/%llx", hash);
+	FILE *fp = fopen(path, "w");
+	size_t siz = fwrite(block, 1, 1048576, fp);
 }
