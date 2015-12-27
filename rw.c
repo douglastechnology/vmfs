@@ -4,7 +4,7 @@
 #include "lz4.h"
 #include "aes.h"
 
-void write_block(const char *block)
+void write_block(const char *block, unsigned char *hash)
 {
 	char *compressed = malloc(32768);
 	int compressed_size = LZ4_compress_default(block, compressed, 32768, 32768);
@@ -18,9 +18,8 @@ void write_block(const char *block)
 	int encrypted_size = encrypt((unsigned char *)compressed, compressed_size, key, iv, encrypted);
 
 	char *path = malloc(100);
-	unsigned char *hash = malloc(16);
 	MurmurHash3_x64_128(block, 32768, 0, hash);
-	sprintf(path, "/root/%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x", hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
+	sprintf(path, "/root/hash/%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x", hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
 
 	FILE *fp = fopen(path, "w");
 	size_t siz = fwrite(encrypted, 1, encrypted_size, fp);
@@ -28,16 +27,19 @@ void write_block(const char *block)
 
 	free(compressed);
 	free(encrypted);
-	free(hash);
 	free(path);
 }
 
-void read_block(char *block)
+void read_block(const unsigned char *hash, char *block)
 {
 	unsigned char *key = (unsigned char *)"11111111111111111111111111111111";
 	unsigned char *iv = (unsigned char *)"22222222222222222";
 	unsigned char *encrypted = malloc(32768);
-	FILE *fp = fopen("/root/b5777c5740d425fb99a1195639e7c25", "r");
+
+	char *path = malloc(100);
+	sprintf(path, "/root/hash/%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x", hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
+
+	FILE *fp = fopen(path, "r");
 	size_t encrypted_size = fread(encrypted, 1, 32768, fp);
 	fclose(fp);
 	
@@ -51,4 +53,5 @@ void read_block(char *block)
 
 	free(compressed);
 	free(encrypted);
+	free(path);
 }
