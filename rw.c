@@ -19,7 +19,8 @@ void write_block(const char *block, unsigned char *hash)
 
 	char *path = malloc(100);
 	MurmurHash3_x64_128(block, 32768, 0, hash);
-	sprintf(path, "/root/hash/%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x", hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
+	sprintf(path, "/root/hash/%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+			hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
 
 	FILE *fp = fopen(path, "w");
 	size_t siz = fwrite(encrypted, 1, encrypted_size, fp);
@@ -37,7 +38,8 @@ void read_block(const unsigned char *hash, char *block)
 	unsigned char *encrypted = malloc(32768);
 
 	char *path = malloc(100);
-	sprintf(path, "/root/hash/%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x", hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
+	sprintf(path, "/root/hash/%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+			hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]);
 
 	FILE *fp = fopen(path, "r");
 	size_t encrypted_size = fread(encrypted, 1, 32768, fp);
