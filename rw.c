@@ -37,7 +37,7 @@ void read_block(char *block)
 	unsigned char *key = (unsigned char *)"11111111111111111111111111111111";
 	unsigned char *iv = (unsigned char *)"22222222222222222";
 	unsigned char *encrypted = malloc(32768);
-	FILE *fp = fopen("/root/de5cd815d1c664b25b173763f66afd1", "r");
+	FILE *fp = fopen("/root/b5777c5740d425fb99a1195639e7c25", "r");
 	size_t encrypted_size = fread(encrypted, 1, 32768, fp);
 	fclose(fp);
 	
