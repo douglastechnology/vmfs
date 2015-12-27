@@ -2,11 +2,15 @@
 
 #include <fuse.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <dirent.h> 
+#include <sys/types.h>
+#include <arpa/inet.h>
 
-static const char *vmfs_path = "/vm";
+#include "rw.h"
 
 static int vmfs_getattr(const char *path, struct stat *stbuf)
 {
@@ -16,12 +20,22 @@ static int vmfs_getattr(const char *path, struct stat *stbuf)
 	if (strcmp(path, "/") == 0) {
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
-	} else if (strcmp(path, vmfs_path) == 0) {
+	} else {
+		char *source_path = malloc(100);
+		sprintf(source_path, "/root/vm/%s", path);
+
+		FILE *fp = fopen(source_path, "r");
+		uint32_t siz;
+		fread(&siz, sizeof(siz), 1, fp);
+		siz = ntohl(siz) * 32768;
+
+		fclose(fp);
+		free(source_path);
+
 		stbuf->st_mode = S_IFREG | 0444;
 		stbuf->st_nlink = 1;
-		stbuf->st_size = 1073741824;
-	} else
-		res = -ENOENT;
+		stbuf->st_size = siz;
+	}
 
 	return res;
 }
@@ -36,15 +50,29 @@ static int vmfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
-	filler(buf, vmfs_path + 1, NULL, 0);
+
+	DIR *d;
+	struct dirent *dir;
+	d = opendir("/root/vm");
+	if(d)
+	{
+		while ((dir = readdir(d)) != NULL)
+		{
+			if (dir->d_type == DT_REG)
+			{
+				filler(buf, dir->d_name, NULL, 0);
+			}
+		}
+		closedir(d);
+	}
 
 	return 0;
 }
 
 static int vmfs_open(const char *path, struct fuse_file_info *fi)
 {
-	if (strcmp(path, vmfs_path) != 0)
-		return -ENOENT;
+	//if (strcmp(path, vmfs_path) != 0)
+	//	return -ENOENT;
 
 	if ((fi->flags & 3) != O_RDONLY)
 		return -EACCES;
@@ -68,7 +96,7 @@ static int vmfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	(void) fi;
 	size_t siz = size;
 
-	FILE *fp = fopen("/root/vmfs/log", "a");
+	FILE *fp = fopen("/root/vmfs.log", "a");
 	fprintf(fp, "%i %i", (int)size, (int)offset);
 
 	if (offset < 1073741824) {
