@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
 
 	FILE *fp = fopen(path, "w");
 	fwrite(&siz, sizeof(siz), 1, fp);
-	const unsigned char *hash = (unsigned char *)"\x84\xd3\x17\x5e\xee\x20\x14\x8b\x0c\x2e\x2d\xe3\xad\x55\x6b\xbc";
+	const unsigned char *hash = (unsigned char *)"\xfe\xbf\x04\xf4\x8e\xc8\xe2\x68\xad\x3f\xf9\x9f\x6a\x18\xff\xaf";
 	fwrite(hash, 16, 1, fp);
 	fclose(fp);
 

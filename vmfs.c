@@ -1,14 +1,15 @@
 #define FUSE_USE_VERSION 26
 
-#include <fuse.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <dirent.h> 
-#include <sys/types.h>
-#include <arpa/inet.h>
+#include <fuse.h>
 
 #include "rw.h"
 
@@ -17,10 +18,13 @@ static int vmfs_getattr(const char *path, struct stat *stbuf)
 	int res = 0;
 
 	memset(stbuf, 0, sizeof(struct stat));
-	if (strcmp(path, "/") == 0) {
-		stbuf->st_mode = S_IFDIR | 0755;
+	if (strcmp(path, "/") == 0)
+	{
+		stbuf->st_mode = __S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
-	} else {
+	}
+	else
+	{
 		char *source_path = malloc(100);
 		sprintf(source_path, "/root/vm/%s", path);
 
@@ -32,7 +36,7 @@ static int vmfs_getattr(const char *path, struct stat *stbuf)
 		fclose(fp);
 		free(source_path);
 
-		stbuf->st_mode = S_IFREG | 0444;
+		stbuf->st_mode = __S_IFREG | 0444;
 		stbuf->st_nlink = 1;
 		stbuf->st_size = siz;
 	}
@@ -80,15 +84,20 @@ static int vmfs_open(const char *path, struct fuse_file_info *fi)
 	return 0;
 }
 
-static size_t fs_read(char **bufp, size_t size, off_t offset)
+static void next_block(int *offset_128G, int *offset_64M, int *offset_32K, void *block_128G_hashes, void *block_64M_hashes, void *block_32K_hashes, void *block_leaf)
 {
-	FILE *fp = fopen("/root/raw101.1M", "r");
-	fseek(fp, offset, SEEK_SET);
-	size_t siz = fread(*bufp, 1, size, fp);
-	fclose(fp);
-	*bufp += siz;
-
-	return siz;
+	(*offset_32K)++;
+	if( *offset_32K >= 2048 )
+	{
+		(*offset_64M)++;
+		if( *offset_64M >= 2048 )
+		{
+			(*offset_128G)++;
+			read_block(block_128G_hashes + 16 * *offset_128G, block_64M_hashes);
+		}
+		read_block(block_64M_hashes + 16 * *offset_64M, block_32K_hashes);
+	}
+	read_block(block_32K_hashes + 16 * *offset_32K, block_leaf);
 }
 
 static int vmfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
@@ -96,32 +105,95 @@ static int vmfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	(void) fi;
 	size_t siz = size;
 
-	FILE *fp = fopen("/root/vmfs.log", "a");
-	fprintf(fp, "%i %i", (int)size, (int)offset);
+	//FILE *logfp = fopen("/root/vmfs.log", "a");
 
-	if (offset < 1073741824) {
-		if (offset + siz > 1073741824)
-			siz = 1073741824 - offset;
-                while (offset >= 1048576)
-			offset -= 1048576;
-		if (offset + siz <= 1048576) {
-			fprintf(fp, " %i", (int)fs_read(&buf, siz, offset));
-		} else {
-			fprintf(fp, " %i", (int)fs_read(&buf, 1048576 - offset, offset));
-			siz -= (1048576 - offset);
-			while (siz > 1048576) {
-				fprintf(fp, " %i", (int)fs_read(&buf, 1048576, 0));
-				siz -= 1048576;
+	char *source_path = malloc(100);
+	sprintf(source_path, "/root/vm%s", path);
+	FILE *fp = fopen(source_path, "r");
+	uint32_t siztemp;
+	fread(&siztemp, sizeof(siztemp), 1, fp);
+	long long fsize = ntohl(siztemp) * 32768;
+	unsigned char *hash_root = malloc(16);
+	fread(hash_root, 16, 1, fp);
+	fclose(fp);
+
+	//fprintf(logfp, "%s filesize: %lld size: %lld offset: %llu", path, fsize, (long long)size, (long long)offset);
+
+	memset(buf, 65, size);
+
+	int offset_128G = 0;
+	int offset_64M = 0;
+	int offset_32K = 0;
+
+	void *block_128G_hashes = malloc(32768);
+	void *block_64M_hashes = malloc(32768);
+	void *block_32K_hashes = malloc(32768);
+	void *block_leaf = malloc(32768);
+
+	if (offset < fsize)
+	{
+		if (offset + siz > fsize)
+			siz = fsize - offset;
+
+		read_block(hash_root, block_128G_hashes);
+                while (offset >= 137438953472)
+		{
+			offset -= 137438953472;
+			offset_128G++;
+		}
+
+		read_block(block_128G_hashes + 16 * offset_128G, block_64M_hashes);
+                while (offset >= 67108864)
+		{
+			offset -= 67108864;
+			offset_64M++;
+		}
+		read_block(block_64M_hashes + 16 * offset_64M, block_32K_hashes);
+                while (offset >= 32768)
+		{
+			offset -= 32768;
+			offset_32K++;
+		}
+		read_block(block_32K_hashes + 16 * offset_32K, block_leaf);
+
+		if (offset + siz <= 32768)
+		{
+			memcpy(buf, block_leaf + offset, siz);
+			//fprintf(logfp, " %i", (int)siz);
+		}
+		else
+		{
+			memcpy(buf, block_leaf + offset, 32768 - (int)offset);
+			buf += (32768 - offset);
+			siz -= (32768 - offset);
+			next_block(&offset_128G, &offset_64M, &offset_32K, block_128G_hashes, block_64M_hashes, block_32K_hashes, block_leaf);
+			//fprintf(logfp, " %i", 32768 - (int)offset);
+
+			while (siz > 32768)
+			{
+				memcpy(buf, block_leaf, 32768);
+				buf += 32768;
+				siz -= 32768;
+				next_block(&offset_128G, &offset_64M, &offset_32K, block_128G_hashes, block_64M_hashes, block_32K_hashes, block_leaf);
+				//fprintf(logfp, " %i", 32768);
 			}
-			if (siz > 0) {
-				fprintf(fp, " %i", (int)fs_read(&buf, siz, 0));
+			if (siz > 0)
+			{
+				memcpy(buf, block_leaf, siz);
+				//fprintf(logfp, " %i", (int)siz);
 			}
 		}
 	} else
 		size = 0;
 
-	fprintf(fp, "\n");
-	fclose(fp);
+	free(hash_root);
+	free(block_128G_hashes);
+	free(block_64M_hashes);
+	free(block_32K_hashes);
+	free(block_leaf);
+
+	//fprintf(logfp, "\n");
+	//fclose(logfp);
 
 	return size;
 }
