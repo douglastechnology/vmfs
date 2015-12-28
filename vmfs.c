@@ -20,7 +20,7 @@ static int vmfs_getattr(const char *path, struct stat *stbuf)
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0)
 	{
-		stbuf->st_mode = __S_IFDIR | 0755;
+		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
 	}
 	else
@@ -36,7 +36,7 @@ static int vmfs_getattr(const char *path, struct stat *stbuf)
 		fclose(fp);
 		free(source_path);
 
-		stbuf->st_mode = __S_IFREG | 0444;
+		stbuf->st_mode = S_IFREG | 0444;
 		stbuf->st_nlink = 1;
 		stbuf->st_size = siz;
 	}
@@ -119,8 +119,6 @@ static int vmfs_read(const char *path, char *buf, size_t size, off_t offset, str
 
 	//fprintf(logfp, "%s filesize: %lld size: %lld offset: %llu", path, fsize, (long long)size, (long long)offset);
 
-	memset(buf, 65, size);
-
 	int offset_128G = 0;
 	int offset_64M = 0;
 	int offset_32K = 0;
@@ -134,7 +132,6 @@ static int vmfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	{
 		if (offset + siz > fsize)
 			siz = fsize - offset;
-
 		read_block(hash_root, block_128G_hashes);
                 while (offset >= 137438953472)
 		{
@@ -183,7 +180,8 @@ static int vmfs_read(const char *path, char *buf, size_t size, off_t offset, str
 				//fprintf(logfp, " %i", (int)siz);
 			}
 		}
-	} else
+	}
+	else
 		size = 0;
 
 	free(hash_root);
